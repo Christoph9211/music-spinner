@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Kaleidoscope Music Visualizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at center, #0a0a0a 0%, #000000 100%);
+            color: #f0f0f0;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+        }
+        #visualizerCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            filter: contrast(1.1) saturate(1.2);
+        }
+        .ui-container {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            background: linear-gradient(135deg, rgba(20, 20, 20, 0.95) 0%, rgba(10, 10, 10, 0.9) 100%);
+            -webkit-backdrop-filter: blur(15px);
+            backdrop-filter: blur(15px);
+            border-radius: 1rem;
+            padding: 1.25rem 2rem;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 12px 48px 0 rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+        .control-button {
+            background: linear-gradient(135deg, #8a2be2 0%, #6a1b9a 100%);
+            color: white;
+            padding: 0.875rem 1.75rem;
+            border-radius: 0.75rem;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 15px rgba(138, 43, 226, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.875rem;
+        }
+        .control-button:hover {
+            background: linear-gradient(135deg, #9932cc 0%, #7b1fa2 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(138, 43, 226, 0.4);
+        }
+        .control-button:active {
+            transform: translateY(0px);
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .slider-label {
+            font-weight: 500;
+            font-size: 0.875rem;
+            color: #e0e0e0;
+            min-width: 60px;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 140px;
+            height: 6px;
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.3) 100%);
+            border-radius: 3px;
+            outline: none;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        input[type="range"]:hover {
+            background: linear-gradient(90deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.4) 100%);
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: linear-gradient(135deg, #8a2be2 0%, #ff6b6b 100%);
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 2px 8px rgba(138, 43, 226, 0.4);
+            transition: all 0.2s ease;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+            box-shadow: 0 3px 12px rgba(138, 43, 226, 0.6);
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: linear-gradient(135deg, #8a2be2 0%, #ff6b6b 100%);
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 2px 8px rgba(138, 43, 226, 0.4);
+        }
+        #message-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: linear-gradient(135deg, rgba(20, 20, 20, 0.95) 0%, rgba(10, 10, 10, 0.9) 100%);
+            padding: 2.5rem;
+            border-radius: 1.25rem;
+            text-align: center;
+            z-index: 20;
+            display: none;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            -webkit-backdrop-filter: blur(20px);
+            backdrop-filter: blur(20px);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+            max-width: 90%;
+        }
+        .glow-effect {
+            animation: pulse 2s ease-in-out infinite alternate;
+        }
+        @keyframes pulse {
+            from { box-shadow: 0 0 20px rgba(138, 43, 226, 0.3); }
+            to { box-shadow: 0 0 30px rgba(138, 43, 226, 0.6), 0 0 40px rgba(138, 43, 226, 0.4); }
+        }
+    </style>
+</head>
+<body class="w-screen h-screen m-0 p-0">
+
+    <canvas id="visualizerCanvas"></canvas>
+
+    <div class="ui-container glow-effect">
+        <button id="startButton" class="control-button">Start</button>
+        <div class="slider-container">
+            <label for="slices" class="slider-label">Slices</label>
+            <input type="range" id="slices" min="4" max="32" value="12" step="2">
+        </div>
+        <div class="slider-container">
+            <label for="sensitivity" class="slider-label">Sensitivity</label>
+            <input type="range" id="sensitivity" min="0.5" max="3" value="1.5" step="0.1">
+        </div>
+        <div class="slider-container">
+            <label for="complexity" class="slider-label">Detail</label>
+            <input type="range" id="complexity" min="1" max="5" value="3" step="1">
+        </div>
+    </div>
+
+    <div id="message-box">
+        <h2 class="text-xl font-bold mb-2">🎵 Microphone Access Required</h2>
+        <p class="text-gray-300">Please allow microphone access to start the visualizer.</p>
+        <p class="text-sm text-gray-400 mt-4">If you've blocked it, you may need to change the permission in your browser's site settings.</p>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const canvas = document.getElementById('visualizerCanvas');
+        const ctx = canvas.getContext('2d');
+        const startButton = document.getElementById('startButton');
+        const slicesSlider = document.getElementById('slices');
+        const sensitivitySlider = document.getElementById('sensitivity');
+        const complexitySlider = document.getElementById('complexity');
+        const messageBox = document.getElementById('message-box');
+
+        // --- Audio Context Setup ---
+        let audioContext;
+        let analyser;
+        let source;
+        let isRunning = false;
+        let rotation = 0;
+        let timeOffset = 0;
+
+        // --- Enhanced Visualization Parameters ---
+        let hue = 0;
+        let pulseIntensity = 0;
+        let bassHistory = [];
+        let midHistory = [];
+        let trebleHistory = [];
+        const historyLength = 30;
+
+        // --- Particle System ---
+        let particles = [];
+        const maxParticles = 200;
+
+        class Particle {
+            constructor(x, y, vx, vy, life, color, size) {
+                this.x = x;
+                this.y = y;
+                this.vx = vx;
+                this.vy = vy;
+                this.life = life;
+                this.maxLife = life;
+                this.color = color;
+                this.size = size;
+                this.rotation = Math.random() * Math.PI * 2;
+                this.rotationSpeed = (Math.random() - 0.5) * 0.2;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vx *= 0.99;
+                this.vy *= 0.99;
+                this.life--;
+                this.rotation += this.rotationSpeed;
+            }
+
+            draw(ctx) {
+                const alpha = this.life / this.maxLife;
+                ctx.save();
+                ctx.globalAlpha = alpha * 0.8;
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                
+                const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, this.size);
+                gradient.addColorStop(0, this.color);
+                gradient.addColorStop(1, this.color.replace(/,\s*[\d.]+\)/, ', 0)'));
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(0, 0, this.size * alpha, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            isDead() {
+                return this.life <= 0;
+            }
+        }
+
+        // --- Canvas and Audio Initialization ---
+        function setup() {
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas, false);
+            startButton.addEventListener('click', toggleAudio);
+            
+            // Initialize with a subtle animated background
+            drawStaticBackground();
+        }
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        function drawStaticBackground() {
+            const gradient = ctx.createRadialGradient(
+                canvas.width / 2, canvas.height / 2, 0,
+                canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) / 2
+            );
+            gradient.addColorStop(0, '#0a0a1a');
+            gradient.addColorStop(0.5, '#050510');
+            gradient.addColorStop(1, '#000000');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        async function toggleAudio() {
+            if (isRunning) {
+                if (audioContext) {
+                    await audioContext.close();
+                    audioContext = null;
+                }
+                isRunning = false;
+                startButton.textContent = 'Start';
+                particles = [];
+                drawStaticBackground();
+            } else {
+                try {
+                    await initAudio();
+                    isRunning = true;
+                    startButton.textContent = 'Stop';
+                    messageBox.style.display = 'none';
+                    animate();
+                } catch (error) {
+                    console.error('Error initializing audio:', error);
+                    messageBox.style.display = 'block';
+                }
+            }
+        }
+
+        async function initAudio() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            
+            source = audioContext.createMediaStreamSource(stream);
+            analyser = audioContext.createAnalyser();
+            
+            analyser.fftSize = 1024;
+            analyser.smoothingTimeConstant = 0.6;
+            
+            source.connect(analyser);
+        }
+
+        // --- Enhanced Animation Loop ---
+        function animate() {
+            if (!isRunning || !analyser) return;
+
+            timeOffset += 0.02;
+
+            // --- Audio Data Analysis ---
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
+
+            // Enhanced frequency analysis with more bands
+            const bassAvg = getFrequencyAverage(dataArray, 0, bufferLength * 0.05);
+            const lowMidAvg = getFrequencyAverage(dataArray, bufferLength * 0.05, bufferLength * 0.15);
+            const midAvg = getFrequencyAverage(dataArray, bufferLength * 0.15, bufferLength * 0.4);
+            const highMidAvg = getFrequencyAverage(dataArray, bufferLength * 0.4, bufferLength * 0.7);
+            const trebleAvg = getFrequencyAverage(dataArray, bufferLength * 0.7, bufferLength);
+
+            // Store history for smoother effects
+            updateHistory(bassAvg, midAvg, trebleAvg);
+
+            // Calculate dynamic pulse intensity
+            pulseIntensity = Math.max(bassAvg, midAvg, trebleAvg) / 255;
+
+            // --- Enhanced Drawing ---
+            draw(dataArray, bassAvg, lowMidAvg, midAvg, highMidAvg, trebleAvg);
+            
+            requestAnimationFrame(animate);
+        }
+
+        function updateHistory(bass, mid, treble) {
+            bassHistory.push(bass);
+            midHistory.push(mid);
+            trebleHistory.push(treble);
+            
+            if (bassHistory.length > historyLength) {
+                bassHistory.shift();
+                midHistory.shift();
+                trebleHistory.shift();
+            }
+        }
+
+        // --- Enhanced Drawing Logic ---
+        function draw(data, bass, lowMid, mid, highMid, treble) {
+            const sensitivity = parseFloat(sensitivitySlider.value);
+            const complexity = parseInt(complexitySlider.value);
+            
+            // Dynamic trail effect based on audio intensity
+            ctx.save();
+            const trailAlpha = 0.03 + (pulseIntensity * 0.07);
+            ctx.fillStyle = `rgba(0, 0, 0, ${trailAlpha})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.restore();
+
+            // Kaleidoscope setup
+            const slices = parseInt(slicesSlider.value);
+            const angleIncrement = (Math.PI * 2) / slices;
+            
+            // Dynamic rotation with momentum
+            rotation += (bass / 5000) * sensitivity + Math.sin(timeOffset) * 0.01;
+
+            ctx.save();
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.rotate(rotation);
+
+            // Enhanced color cycling
+            hue += 0.3 + (treble / 500) + Math.sin(timeOffset * 2) * 0.2;
+
+            // Main kaleidoscope rendering
+            for (let i = 0; i < slices; i++) {
+                ctx.rotate(angleIncrement);
+                
+                if (i % 2 === 0) {
+                    ctx.save();
+                    ctx.scale(1, -1);
+                }
+
+                drawEnhancedSlice(data, bass, lowMid, mid, highMid, treble, sensitivity, complexity, i);
+                
+                if (i % 2 === 0) {
+                    ctx.restore();
+                }
+            }
+
+            ctx.restore();
+
+            // Update and draw particles
+            updateParticles();
+            
+            // Add new particles based on audio intensity
+            if (treble > 30 && particles.length < maxParticles) {
+                addParticles(bass, mid, treble);
+            }
+        }
+
+        function drawEnhancedSlice(data, bass, lowMid, mid, highMid, treble, sensitivity, complexity, sliceIndex) {
+            const centerX = 0;
+            const centerY = 0;
+            
+            // Multiple layer rendering for depth
+            for (let layer = 0; layer < complexity; layer++) {
+                const layerOffset = layer * 20;
+                const layerAlpha = 1 - (layer * 0.2);
+                
+                ctx.save();
+                ctx.globalAlpha = layerAlpha;
+                
+                // Primary frequency wave
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                
+                const points = Math.min(data.length, 128);
+                const step = Math.floor(data.length / points);
+                
+                for (let i = 0; i < points; i += 2) {
+                    const value = data[i * step] * sensitivity;
+                    const nextValue = data[Math.min((i + 1) * step, data.length - 1)] * sensitivity;
+                    
+                    const progress = i / points;
+                    const angle = progress * Math.PI * 0.8;
+                    
+                    // Multi-frequency influence on radius
+                    let radius = value * 0.8 + 
+                               Math.sin(progress * Math.PI * 4 + timeOffset * 3) * (mid / 10) +
+                               Math.cos(progress * Math.PI * 6 + timeOffset * 2) * (treble / 15);
+                    
+                    radius += layerOffset;
+                    
+                    const x = Math.cos(angle) * radius;
+                    const y = Math.sin(angle) * radius;
+                    
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        // Smooth curves
+                        const prevProgress = (i - 2) / points;
+                        const prevAngle = prevProgress * Math.PI * 0.8;
+                        const prevRadius = data[Math.max((i - 2) * step, 0)] * sensitivity * 0.8 + layerOffset;
+                        const prevX = Math.cos(prevAngle) * prevRadius;
+                        const prevY = Math.sin(prevAngle) * prevRadius;
+                        
+                        const cpX = (prevX + x) / 2 + Math.sin(timeOffset + progress * 10) * (bass / 50);
+                        const cpY = (prevY + y) / 2 + Math.cos(timeOffset + progress * 8) * (lowMid / 40);
+                        
+                        ctx.quadraticCurveTo(cpX, cpY, x, y);
+                    }
+                }
+                
+                // Dynamic line styling
+                ctx.lineWidth = 1 + (mid / 80) + layer * 0.5;
+                const colorShift = sliceIndex * 30 + layer * 20;
+                const saturation = 70 + (treble / 255 * 30);
+                const lightness = 45 + (bass / 255 * 30) + Math.sin(timeOffset) * 10;
+                
+                ctx.strokeStyle = `hsla(${hue + colorShift}, ${saturation}%, ${lightness}%, ${layerAlpha})`;
+                ctx.stroke();
+                
+                // Add glow effect for high intensity
+                if (pulseIntensity > 0.6) {
+                    ctx.shadowBlur = 15 + (pulseIntensity * 20);
+                    ctx.shadowColor = ctx.strokeStyle;
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                }
+                
+                ctx.restore();
+            }
+            
+            // Add geometric patterns based on frequency bands
+            if (bass > 50) {
+                drawGeometricElements(bass, mid, treble, sliceIndex);
+            }
+        }
+
+        function drawGeometricElements(bass, mid, treble, sliceIndex) {
+            const elementCount = Math.floor(bass / 40);
+            
+            for (let i = 0; i < Math.min(elementCount, 8); i++) {
+                const radius = 50 + i * 30 + (mid / 10);
+                const size = 3 + (treble / 60);
+                const angle = (i / elementCount) * Math.PI * 0.6;
+                
+                const x = Math.cos(angle) * radius;
+                const y = Math.sin(angle) * radius;
+                
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(timeOffset * 2 + i);
+                
+                const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 2);
+                gradient.addColorStop(0, `hsla(${hue + sliceIndex * 25 + i * 40}, 90%, 70%, 0.8)`);
+                gradient.addColorStop(1, `hsla(${hue + sliceIndex * 25 + i * 40}, 90%, 70%, 0)`);
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(0, 0, size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.restore();
+            }
+        }
+
+        function addParticles(bass, mid, treble) {
+            const count = Math.floor(treble / 30);
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            for (let i = 0; i < Math.min(count, 8); i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const distance = Math.random() * 200 + 50;
+                const speed = 2 + Math.random() * 4;
+                
+                const x = centerX + Math.cos(angle) * distance;
+                const y = centerY + Math.sin(angle) * distance;
+                const vx = Math.cos(angle) * speed;
+                const vy = Math.sin(angle) * speed;
+                
+                const life = 60 + Math.random() * 120;
+                const color = `hsla(${hue + Math.random() * 60}, 90%, 70%, 0.8)`;
+                const size = 2 + Math.random() * 4;
+                
+                particles.push(new Particle(x, y, vx, vy, life, color, size));
+            }
+        }
+
+        function updateParticles() {
+            ctx.save();
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            
+            particles = particles.filter(particle => {
+                particle.update();
+                if (!particle.isDead()) {
+                    particle.draw(ctx);
+                    return true;
+                }
+                return false;
+            });
+            
+            ctx.restore();
+        }
+
+        // --- Helper Functions ---
+        function getFrequencyAverage(dataArray, lowIndex, highIndex) {
+            let sum = 0;
+            const floorLow = Math.floor(lowIndex);
+            const floorHigh = Math.floor(highIndex);
+            for (let i = floorLow; i < floorHigh; i++) {
+                sum += dataArray[i];
+            }
+            return sum / (floorHigh - floorLow);
+        }
+
+        // --- Start the application ---
+        setup();
+    </script>
+</body>
+</html>

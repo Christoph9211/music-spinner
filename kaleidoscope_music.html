@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kaleidoscope Music Visualizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Basic styling for the body and canvas */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000000;
+            color: #f0f0f0;
+            overflow: hidden; /* Prevents scrollbars */
+            margin: 0;
+            padding: 0;
+        }
+        #visualizerCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+        /* Styling for the UI controls container */
+        .ui-container {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            background-color: rgba(17, 17, 17, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 0.75rem;
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        /* Styling for buttons */
+        .control-button {
+            background-color: #8a2be2; /* A nice purple */
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            border: none;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+        .control-button:hover {
+            background-color: #9932cc; /* Darker purple on hover */
+        }
+        .control-button:active {
+            transform: scale(0.95);
+        }
+        /* Styling for sliders */
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 120px;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 5px;
+            outline: none;
+            transition: opacity .2s;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #8a2be2;
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #8a2be2;
+            cursor: pointer;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+        /* Message box for permissions */
+        #message-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(17, 17, 17, 0.9);
+            padding: 2rem;
+            border-radius: 1rem;
+            text-align: center;
+            z-index: 20;
+            display: none; /* Initially hidden */
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 90%;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen m-0 p-0">
+
+    <canvas id="visualizerCanvas"></canvas>
+
+    <div class="ui-container">
+        <button id="startButton" class="control-button">Start</button>
+        <div class="slider-container">
+            <label for="slices" class="font-medium text-sm">Slices</label>
+            <input type="range" id="slices" min="2" max="24" value="8" step="2">
+        </div>
+    </div>
+
+    <div id="message-box">
+        <h2 class="text-xl font-bold mb-2">Microphone Access Required</h2>
+        <p class="text-gray-300">Please allow microphone access to start the visualizer.</p>
+        <p class="text-sm text-gray-400 mt-4">If you've blocked it, you may need to change the permission in your browser's site settings.</p>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const canvas = document.getElementById('visualizerCanvas');
+        const ctx = canvas.getContext('2d');
+        const startButton = document.getElementById('startButton');
+        const slicesSlider = document.getElementById('slices');
+        const messageBox = document.getElementById('message-box');
+
+        // --- Audio Context Setup ---
+        let audioContext;
+        let analyser;
+        let source;
+        let isRunning = false;
+        let rotation = 0;
+
+        // --- Visualization Parameters ---
+        let hue = 0;
+
+        // --- Canvas and Audio Initialization ---
+        function setup() {
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas, false);
+            startButton.addEventListener('click', toggleAudio);
+            // Initial clear
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        async function toggleAudio() {
+            if (isRunning) {
+                // Stop the audio processing
+                if (audioContext) {
+                    await audioContext.close();
+                    audioContext = null;
+                }
+                isRunning = false;
+                startButton.textContent = 'Start';
+                // Clear canvas to show it's stopped
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            } else {
+                // Start the audio processing
+                try {
+                    await initAudio();
+                    isRunning = true;
+                    startButton.textContent = 'Stop';
+                    messageBox.style.display = 'none';
+                    animate();
+                } catch (error) {
+                    console.error('Error initializing audio:', error);
+                    // Show a helpful message to the user
+                    messageBox.style.display = 'block';
+                }
+            }
+        }
+
+        async function initAudio() {
+            // Create AudioContext after user gesture (e.g., button click)
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Get microphone input stream
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            
+            // Create audio nodes
+            source = audioContext.createMediaStreamSource(stream);
+            analyser = audioContext.createAnalyser();
+            
+            // Configure the analyser
+            analyser.fftSize = 512; // A good balance between performance and detail
+            
+            // Connect nodes: microphone -> analyser
+            source.connect(analyser);
+            // We don't connect the analyser to the destination, so we don't hear the mic input (no feedback)
+        }
+
+        // --- Main Animation Loop ---
+        function animate() {
+            if (!isRunning || !analyser) return;
+
+            // --- Audio Data Analysis ---
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
+
+            // Calculate average levels for different frequency bands
+            const bassAvg = getFrequencyAverage(dataArray, 0, bufferLength * 0.1); // Low frequencies
+            const midAvg = getFrequencyAverage(dataArray, bufferLength * 0.1, bufferLength * 0.4); // Mid frequencies
+            const trebleAvg = getFrequencyAverage(dataArray, bufferLength * 0.4, bufferLength); // High frequencies
+
+            // --- Drawing and Visualization ---
+            draw(dataArray, bassAvg, midAvg, trebleAvg);
+            
+            // Request the next frame to continue the animation
+            requestAnimationFrame(animate);
+        }
+
+        // --- Drawing Logic ---
+        function draw(data, bass, mids, treble) {
+            // Create a motion blur/trail effect by fading the previous frame
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'; // Lower alpha for longer trails
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.restore();
+
+            // Get kaleidoscope parameters from the UI
+            const slices = parseInt(slicesSlider.value);
+            const angleIncrement = (Math.PI * 2) / slices;
+            
+            // The overall rotation speed is influenced by the bass
+            rotation += bass / 8000;
+
+            // Move to the center of the canvas
+            ctx.save();
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.rotate(rotation);
+
+            // Update hue for color cycling, speed based on treble
+            hue += 0.5 + (treble / 255);
+
+            // Main kaleidoscope loop
+            for (let i = 0; i < slices; i++) {
+                ctx.rotate(angleIncrement);
+                
+                // Mirror every other slice for the classic kaleidoscope effect
+                if (i % 2 === 0) {
+                    ctx.save();
+                    ctx.scale(1, -1);
+                }
+
+                // --- Draw Visual Elements based on Audio ---
+                drawSlice(data, bass, mids, treble);
+                
+                if (i % 2 === 0) {
+                    ctx.restore();
+                }
+            }
+
+            ctx.restore(); // Restore from center translation and rotation
+        }
+        
+        // This function draws the content for a single kaleidoscope slice
+        function drawSlice(data, bass, mids, treble) {
+            ctx.beginPath();
+            // Start drawing from a point influenced by the bass
+            ctx.moveTo(bass / 4, bass / 4);
+
+            // Draw a complex line based on frequency data
+            for (let i = 0; i < data.length; i+=4) {
+                const value = data[i];
+                const radius = value * (mids / 255 + 3); // Radius influenced by mids
+                const angle = (i / data.length) * Math.PI; // Position within the slice
+
+                const x = Math.cos(angle) * radius;
+                const y = Math.sin(angle) * radius;
+
+                ctx.lineTo(x, y);
+            }
+            
+            ctx.lineWidth = 1 + (mids / 128);
+            ctx.strokeStyle = `hsl(${hue + (bass / 255 * 50)}, 100%, ${50 + treble / 255 * 25}%)`;
+            ctx.stroke();
+
+            // Add some "sparkle" particles based on treble
+            const particleCount = Math.floor(treble / 5);
+            for (let k = 0; k < particleCount; k++) {
+                const radius = Math.random() * 300 * (bass / 255 + 0.2);
+                const angle = Math.random() * Math.PI;
+                const x = Math.cos(angle) * radius;
+                const y = Math.sin(angle) * radius;
+                
+                ctx.fillStyle = `hsla(${hue + Math.random() * 50}, 100%, 80%, 0.8)`;
+                ctx.beginPath();
+                ctx.arc(x, y, 1 + Math.random() * (treble/128), 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+
+        // --- Helper Functions ---
+        function getFrequencyAverage(dataArray, lowIndex, highIndex) {
+            let sum = 0;
+            const floorLow = Math.floor(lowIndex);
+            const floorHigh = Math.floor(highIndex);
+            for (let i = floorLow; i < floorHigh; i++) {
+                sum += dataArray[i];
+            }
+            return sum / (floorHigh - floorLow);
+        }
+
+        // --- Start the application ---
+        setup();
+    </script>
+</body>
+</html>

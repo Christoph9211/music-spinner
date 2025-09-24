@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USB Microphone Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex flex-col items-center justify-center h-screen m-0">
+    <!-- Main container for the visualizer -->
+    <div id="container" class="w-full h-full relative">
+        <canvas id="visualizerCanvas"></canvas>
+        <!-- UI elements positioned over the canvas -->
+        <div id="ui-container" class="absolute top-0 left-0 p-6 w-full h-full flex flex-col items-center justify-center pointer-events-none">
+            <div id="message-box" class="bg-gray-800 bg-opacity-80 p-6 rounded-lg shadow-lg text-center max-w-md">
+                <h1 class="text-3xl font-bold mb-2">Audio Visualizer</h1>
+                <p id="instructions" class="text-gray-300 mb-4">Click the button below and allow microphone access to start the visualization.</p>
+                <button id="startButton" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out pointer-events-auto">
+                    Start Visualization
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Element References ---
+        const startButton = document.getElementById('startButton');
+        const canvas = document.getElementById('visualizerCanvas');
+        const ctx = canvas.getContext('2d');
+        const instructions = document.getElementById('instructions');
+        const messageBox = document.getElementById('message-box');
+
+        // --- Audio Analysis Setup ---
+        let audioContext;
+        let analyser;
+        let dataArray;
+        let source;
+
+        // --- Ripple Simulation Parameters ---
+        const rippleGridWidth = 128;
+        const rippleGridHeight = 128;
+        let currentRipples = new Float32Array(rippleGridWidth * rippleGridHeight).fill(0);
+        let previousRipples = new Float32Array(rippleGridWidth * rippleGridHeight).fill(0);
+        const DAMPENING = 0.99; // How quickly ripples fade
+        const SPREAD = 0.15;    // How fast ripples spread
+
+        // --- Canvas and Rendering Setup ---
+        let canvasWidth, canvasHeight;
+
+        /**
+         * Sets up the canvas dimensions to fill the window and resizes it on window change.
+         */
+        function setupCanvas() {
+            canvasWidth = canvas.width = window.innerWidth;
+            canvasHeight = canvas.height = window.innerHeight;
+            window.addEventListener('resize', () => {
+                canvasWidth = canvas.width = window.innerWidth;
+                canvasHeight = canvas.height = window.innerHeight;
+            });
+        }
+
+        /**
+         * Initializes the Web Audio API, gets microphone access, and connects the audio nodes.
+         */
+        async function setupAudio() {
+            try {
+                // Request microphone access
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                
+                // Create audio context and analyser
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 512; // Frequency resolution
+                
+                // Connect microphone stream to analyser
+                source = audioContext.createMediaStreamSource(stream);
+                source.connect(analyser);
+                
+                // Prepare data array for frequency data
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+                // Update UI
+                instructions.textContent = 'Microphone connected. The ripples will react to bass sounds.';
+                startButton.style.display = 'none';
+                setTimeout(() => { messageBox.style.opacity = 0; }, 2000);
+
+                // Start the visualization loop
+                animate();
+            } catch (err) {
+                console.error('Error accessing microphone:', err);
+                instructions.textContent = 'Could not access the microphone. Please check permissions and try again.';
+            }
+        }
+
+        /**
+         * The main animation loop, called for each frame.
+         */
+        function animate() {
+            // Get the latest frequency data from the analyser
+            analyser.getByteFrequencyData(dataArray);
+
+            // Calculate the average bass level (lower frequencies)
+            const bassLevel = getBassLevel();
+
+            // If there's a significant bass hit, create a new ripple
+            if (bassLevel > 100) { // Threshold for creating a ripple
+                createRipple(bassLevel);
+            }
+
+            // Update the ripple simulation
+            updateRipples();
+
+            // Draw the current state of the ripples to the canvas
+            drawRipples();
+
+            // Request the next frame
+            requestAnimationFrame(animate);
+        }
+
+        /**
+         * Calculates the average value of the bass frequencies.
+         * @returns {number} The average bass level.
+         */
+        function getBassLevel() {
+            let sum = 0;
+            // Focus on the first 10% of frequency bins, which typically represent bass
+            const bassRange = Math.floor(analyser.frequencyBinCount * 0.1);
+            for (let i = 0; i < bassRange; i++) {
+                sum += dataArray[i];
+            }
+            return sum / bassRange;
+        }
+
+        /**
+         * Creates a new ripple at a random position with an intensity based on the bass level.
+         * @param {number} intensity - The strength of the new ripple.
+         */
+        function createRipple(intensity) {
+            // Choose a random location for the ripple to start
+            const x = Math.floor(Math.random() * (rippleGridWidth - 4)) + 2;
+            const y = Math.floor(Math.random() * (rippleGridHeight - 4)) + 2;
+            
+            // Set the ripple's initial height based on the bass intensity
+            // The value is clamped to avoid extreme visual artifacts
+            const rippleValue = Math.min(intensity * 10, 2000);
+            previousRipples[y * rippleGridWidth + x] = rippleValue;
+        }
+
+        /**
+         * Updates the state of the ripple simulation for the next frame.
+         * This uses a simple wave equation simulation.
+         */
+        function updateRipples() {
+            for (let y = 1; y < rippleGridHeight - 1; y++) {
+                for (let x = 1; x < rippleGridWidth - 1; x++) {
+                    const index = y * rippleGridWidth + x;
+                    
+                    // Calculate the new height based on the average of neighboring points
+                    const sum = (
+                        previousRipples[index - 1] +
+                        previousRipples[index + 1] +
+                        previousRipples[index - rippleGridWidth] +
+                        previousRipples[index + rippleGridWidth]
+                    ) / 2 - currentRipples[index];
+
+                    // Apply dampening to make the ripples fade over time
+                    currentRipples[index] = sum * DAMPENING;
+                }
+            }
+
+            // Swap the buffers for the next iteration
+            let temp = previousRipples;
+            previousRipples = currentRipples;
+            currentRipples = temp;
+        }
+
+        /**
+         * Renders the current state of the ripple grid to the canvas.
+         */
+        function drawRipples() {
+            // Clear the canvas with a dark background
+            ctx.fillStyle = '#0a0a14';
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+            const cellWidth = canvasWidth / rippleGridWidth;
+            const cellHeight = canvasHeight / rippleGridHeight;
+
+            // Iterate over the ripple grid and draw each point
+            for (let y = 1; y < rippleGridHeight - 1; y++) {
+                for (let x = 1; x < rippleGridWidth - 1; x++) {
+                    const index = y * rippleGridWidth + x;
+                    const rippleValue = currentRipples[index];
+
+                    // Map the ripple height to a color
+                    // Positive values are blue, negative are purple/red
+                    const blue = Math.max(0, Math.min(255, 100 + rippleValue * 0.5));
+                    const red = Math.max(0, Math.min(255, 100 - rippleValue * 0.5));
+                    const green = Math.max(0, Math.min(255, 50 - Math.abs(rippleValue * 0.2)));
+
+                    ctx.fillStyle = `rgb(${red}, ${green}, ${blue})`;
+                    ctx.fillRect(x * cellWidth, y * cellHeight, cellWidth, cellHeight);
+                }
+            }
+        }
+
+        // --- Event Listeners and Initialization ---
+        startButton.addEventListener('click', setupAudio);
+        window.addEventListener('load', setupCanvas);
+
+    </script>
+</body>
+</html>
