@@ -234,7 +234,7 @@
         function draw(data, bass, mids, treble) {
             // Create a motion blur/trail effect by fading the previous frame
             ctx.save();
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.025)'; // Lower alpha for longer trails
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'; // Lower alpha for longer trails
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.restore();
 
@@ -243,7 +243,7 @@
             const angleIncrement = (Math.PI * 2) / slices;
             
             // The overall rotation speed is influenced by the bass
-            rotation += bass / 6000;
+            rotation += bass / 8000;
 
             // Move to the center of the canvas
             ctx.save();

@@ -234,7 +234,7 @@
         function draw(data, bass, mids, treble) {
             // Create a motion blur/trail effect by fading the previous frame
             ctx.save();
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.025)'; // Lower alpha for longer trails
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'; // Lower alpha for longer trails
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.restore();
 
@@ -243,7 +243,7 @@
             const angleIncrement = (Math.PI * 2) / slices;
             
             // The overall rotation speed is influenced by the bass
-            rotation += bass / 6000;
+            rotation += bass / 8000;
 
             // Move to the center of the canvas
             ctx.save();
@@ -283,7 +283,7 @@
             // Draw a complex line based on frequency data
             for (let i = 0; i < data.length; i+=4) {
                 const value = data[i];
-                const radius = value * (mids / 255 + 3); // Radius influenced by mids
+                const radius = value * (mids / 255 + 0.5); // Radius influenced by mids
                 const angle = (i / data.length) * Math.PI; // Position within the slice
 
                 const x = Math.cos(angle) * radius;
@@ -297,7 +297,7 @@
             ctx.stroke();
 
             // Add some "sparkle" particles based on treble
-            const particleCount = Math.floor(treble / 5);
+            const particleCount = Math.floor(treble / 20);
             for (let k = 0; k < particleCount; k++) {
                 const radius = Math.random() * 300 * (bass / 255 + 0.2);
                 const angle = Math.random() * Math.PI;

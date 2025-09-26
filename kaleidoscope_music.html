@@ -121,6 +121,11 @@
             <label for="slices" class="font-medium text-sm">Slices</label>
             <input type="range" id="slices" min="2" max="24" value="8" step="2">
         </div>
+        <div class="slider-container">
+            <label for="sensitivity" class="font-medium text-sm">Sensitivity</label>
+            <input type="range" id="sensitivity" min="0.8" max="2" value="1.2" step="0.05">
+            <span id="sensitivityValue" class="text-xs text-gray-300 w-12 text-center">1.20</span>
+        </div>
     </div>
 
     <div id="message-box">
@@ -135,6 +140,8 @@
         const ctx = canvas.getContext('2d');
         const startButton = document.getElementById('startButton');
         const slicesSlider = document.getElementById('slices');
+        const sensitivitySlider = document.getElementById('sensitivity');
+        const sensitivityValue = document.getElementById('sensitivityValue');
         const messageBox = document.getElementById('message-box');
 
         // --- Audio Context Setup ---
@@ -144,6 +151,12 @@
         let isRunning = false;
         let rotation = 0;
 
+        // Reused audio buffers/state
+        let freqData;
+        let beat;
+        let beatPulse = 0;
+        let sensitivity = 1.2;
+
         // --- Visualization Parameters ---
         let hue = 0;
 
@@ -152,6 +165,11 @@
             resizeCanvas();
             window.addEventListener('resize', resizeCanvas, false);
             startButton.addEventListener('click', toggleAudio);
+            if (sensitivitySlider && sensitivityValue) {
+                sensitivity = parseFloat(sensitivitySlider.value) || sensitivity;
+                sensitivityValue.textContent = sensitivity.toFixed(2);
+                sensitivitySlider.addEventListener('input', handleSensitivityChange);
+            }
             // Initial clear
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -174,6 +192,9 @@
                 // Clear canvas to show it's stopped
                 ctx.fillStyle = '#000';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
+                freqData = null;
+                beat = null;
+                beatPulse = 0;
             } else {
                 // Start the audio processing
                 try {
@@ -190,126 +211,197 @@
             }
         }
 
-        async function initAudio() {
-            // Create AudioContext after user gesture (e.g., button click)
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // Get microphone input stream
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-            
-            // Create audio nodes
-            source = audioContext.createMediaStreamSource(stream);
-            analyser = audioContext.createAnalyser();
-            
-            // Configure the analyser
-            analyser.fftSize = 512; // A good balance between performance and detail
-            
-            // Connect nodes: microphone -> analyser
-            source.connect(analyser);
-            // We don't connect the analyser to the destination, so we don't hear the mic input (no feedback)
+        function handleSensitivityChange(event) {
+            const value = parseFloat(event.target.value);
+            if (!Number.isFinite(value)) {
+                return;
+            }
+            sensitivity = value;
+            if (sensitivityValue) {
+                sensitivityValue.textContent = sensitivity.toFixed(2);
+            }
+            if (beat) {
+                beat.zThreshold = sensitivity;
+            }
         }
+
+
+        async function initAudio() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                latencyHint: 'interactive'
+            });
+
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false,
+                    channelCount: 1,
+                    latency: 0
+                },
+                video: false
+            });
+
+            source = audioContext.createMediaStreamSource(stream);
+
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            analyser.smoothingTimeConstant = 0.0;
+            analyser.minDecibels = -100;
+            analyser.maxDecibels = -10;
+
+            source.connect(analyser);
+
+            freqData = new Uint8Array(analyser.frequencyBinCount);
+            beat = new BassOnsetDetector({
+                lowBin: 1,
+                highBin: Math.floor(analyser.frequencyBinCount * 0.1),
+                history: 24,
+                zThreshold: sensitivity,
+                minIntervalMs: 110
+            });
+            beatPulse = 0;
+        }
+
+        // --- Simple, low-latency bass-onset detector (rising energy vs adaptive baseline)
+        class BassOnsetDetector {
+            constructor({lowBin = 1, highBin = 8, history = 24, zThreshold = 1.2, minIntervalMs = 110} = {}) {
+                this.lowBin = lowBin;
+                this.highBin = highBin;
+                this.history = history;
+                this.zThreshold = zThreshold;
+                this.minIntervalMs = minIntervalMs;
+                this.buffer = new Float32Array(history);
+                this.i = 0;
+                this.count = 0;
+                this.lastMs = 0;
+            }
+            update(freqDataUint8) {
+                let sum = 0;
+                const hi = Math.min(this.highBin, freqDataUint8.length);
+                for (let i = this.lowBin; i < hi; i++) sum += freqDataUint8[i];
+                const energy = sum / Math.max(1, (hi - this.lowBin));
+
+                if (this.count < this.history) this.count++;
+                this.buffer[this.i] = energy;
+                this.i = (this.i + 1) % this.history;
+
+                let mean = 0;
+                for (let k = 0; k < this.count; k++) mean += this.buffer[k];
+                mean /= this.count;
+
+                let varsum = 0;
+                for (let k = 0; k < this.count; k++) {
+                    const d = this.buffer[k] - mean;
+                    varsum += d * d;
+                }
+                const std = Math.sqrt(varsum / Math.max(1, this.count - 1));
+
+                const z = std > 1e-3 ? (energy - mean) / std : 0;
+
+                const now = performance.now();
+                const rising = energy > mean && energy > (this.buffer[(this.i + this.history - 2) % this.history] || 0);
+
+                const fired = (z > this.zThreshold) && rising && (now - this.lastMs > this.minIntervalMs);
+                if (fired) this.lastMs = now;
+
+                return { fired, energy, mean, std, z };
+            }
+        }
+
 
         // --- Main Animation Loop ---
         function animate() {
-            if (!isRunning || !analyser) return;
+            if (!isRunning || !analyser || !freqData) return;
 
-            // --- Audio Data Analysis ---
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-            analyser.getByteFrequencyData(dataArray);
+            analyser.getByteFrequencyData(freqData);
 
-            // Calculate average levels for different frequency bands
-            const bassAvg = getFrequencyAverage(dataArray, 0, bufferLength * 0.1); // Low frequencies
-            const midAvg = getFrequencyAverage(dataArray, bufferLength * 0.1, bufferLength * 0.4); // Mid frequencies
-            const trebleAvg = getFrequencyAverage(dataArray, bufferLength * 0.4, bufferLength); // High frequencies
+            const bufferLength = freqData.length;
+            const bassAvg = getFrequencyAverage(freqData, 0, bufferLength * 0.1);
+            const midAvg = getFrequencyAverage(freqData, bufferLength * 0.1, bufferLength * 0.4);
+            const trebleAvg = getFrequencyAverage(freqData, bufferLength * 0.4, bufferLength);
 
-            // --- Drawing and Visualization ---
-            draw(dataArray, bassAvg, midAvg, trebleAvg);
-            
-            // Request the next frame to continue the animation
+            const { fired, z } = beat.update(freqData);
+            beatPulse = Math.max(fired ? 1.0 : 0.0, (beatPulse || 0) * 0.90);
+
+            draw(freqData, bassAvg, midAvg, trebleAvg, { beatPulse, z });
+
             requestAnimationFrame(animate);
         }
 
+
+
         // --- Drawing Logic ---
-        function draw(data, bass, mids, treble) {
-            // Create a motion blur/trail effect by fading the previous frame
+        function draw(data, bass, mids, treble, { beatPulse = 0 } = {}) {
             ctx.save();
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'; // Lower alpha for longer trails
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.restore();
 
-            // Get kaleidoscope parameters from the UI
             const slices = parseInt(slicesSlider.value);
             const angleIncrement = (Math.PI * 2) / slices;
-            
-            // The overall rotation speed is influenced by the bass
-            rotation += bass / 8000;
 
-            // Move to the center of the canvas
+            rotation += (bass / 8000) + (beatPulse * 0.05);
+
             ctx.save();
             ctx.translate(canvas.width / 2, canvas.height / 2);
             ctx.rotate(rotation);
 
-            // Update hue for color cycling, speed based on treble
-            hue += 0.5 + (treble / 255);
+            hue += 0.5 + (treble / 255) + beatPulse * 0.8;
 
-            // Main kaleidoscope loop
             for (let i = 0; i < slices; i++) {
                 ctx.rotate(angleIncrement);
-                
-                // Mirror every other slice for the classic kaleidoscope effect
+
                 if (i % 2 === 0) {
                     ctx.save();
                     ctx.scale(1, -1);
                 }
 
-                // --- Draw Visual Elements based on Audio ---
-                drawSlice(data, bass, mids, treble);
-                
+                drawSlice(data, bass, mids, treble, beatPulse);
+
                 if (i % 2 === 0) {
                     ctx.restore();
                 }
             }
 
-            ctx.restore(); // Restore from center translation and rotation
+            ctx.restore();
         }
-        
+
+
         // This function draws the content for a single kaleidoscope slice
-        function drawSlice(data, bass, mids, treble) {
+        function drawSlice(data, bass, mids, treble, beatPulse) {
             ctx.beginPath();
-            // Start drawing from a point influenced by the bass
             ctx.moveTo(bass / 4, bass / 4);
 
-            // Draw a complex line based on frequency data
-            for (let i = 0; i < data.length; i+=4) {
-                const value = data[i];
-                const radius = value * (mids / 255 + 3); // Radius influenced by mids
-                const angle = (i / data.length) * Math.PI; // Position within the slice
+            ctx.lineWidth = 0.25 + (mids / 128) + beatPulse * 0.5;
+            ctx.strokeStyle = `hsl(${hue + (bass / 255 * 50)}, 100%, ${50 + treble / 255 * 25}%)`;
 
+            for (let i = 0; i < data.length; i += 4) {
+                const value = data[i];
+                const radius = value * (mids / 255 + 3 + beatPulse * 2.0);
+                const angle = (i / data.length) * Math.PI;
                 const x = Math.cos(angle) * radius;
                 const y = Math.sin(angle) * radius;
-
                 ctx.lineTo(x, y);
             }
-            
-            ctx.lineWidth = 1 + (mids / 128);
-            ctx.strokeStyle = `hsl(${hue + (bass / 255 * 50)}, 100%, ${50 + treble / 255 * 25}%)`;
+
             ctx.stroke();
 
-            // Add some "sparkle" particles based on treble
-            const particleCount = Math.floor(treble / 5);
+            const baseParticles = Math.floor(treble / 5);
+            const particleCount = baseParticles + Math.floor(beatPulse * 55);
             for (let k = 0; k < particleCount; k++) {
-                const radius = Math.random() * 300 * (bass / 255 + 0.2);
+                const radius = Math.random() * 300 * (bass / 255 + 0.2) * (1 + beatPulse * 0.8);
                 const angle = Math.random() * Math.PI;
                 const x = Math.cos(angle) * radius;
                 const y = Math.sin(angle) * radius;
-                
-                ctx.fillStyle = `hsla(${hue + Math.random() * 50}, 100%, 80%, 0.8)`;
+                ctx.fillStyle = `hsla(${hue + Math.random() * 50}, 100%, ${70 + beatPulse * 25}%, ${0.6 + beatPulse * 0.3})`;
                 ctx.beginPath();
-                ctx.arc(x, y, 1 + Math.random() * (treble/128), 0, Math.PI * 2);
+                ctx.arc(x, y, 1 + Math.random() * (treble / 128 + beatPulse * 2.0), 0, Math.PI * 2);
                 ctx.fill();
             }
         }
+
+
 
 
         // --- Helper Functions ---

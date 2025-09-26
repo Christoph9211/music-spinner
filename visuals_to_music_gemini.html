@@ -9,14 +9,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Basic styling for the body and canvas */
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #000000;
+            background-color: #0a0a0a;
             color: #f0f0f0;
-            overflow: hidden; /* Prevents scrollbars */
-            margin: 0;
-            padding: 0;
+            overflow: hidden;
         }
         #visualizerCanvas {
             position: absolute;
@@ -26,10 +23,9 @@
             height: 100%;
             z-index: 0;
         }
-        /* Styling for the UI controls container */
         .ui-container {
             position: absolute;
-            bottom: 2rem;
+            top: 1rem;
             left: 50%;
             transform: translateX(-50%);
             z-index: 10;
@@ -43,9 +39,8 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
         }
-        /* Styling for buttons */
         .control-button {
-            background-color: #8a2be2; /* A nice purple */
+            background-color: #8a2be2;
             color: white;
             padding: 0.75rem 1.5rem;
             border-radius: 0.5rem;
@@ -55,12 +50,11 @@
             transition: background-color 0.3s ease, transform 0.2s ease;
         }
         .control-button:hover {
-            background-color: #9932cc; /* Darker purple on hover */
+            background-color: #9932cc;
         }
         .control-button:active {
             transform: scale(0.95);
         }
-        /* Styling for sliders */
         .slider-container {
             display: flex;
             align-items: center;
@@ -69,7 +63,7 @@
         input[type="range"] {
             -webkit-appearance: none;
             appearance: none;
-            width: 120px;
+            width: 150px;
             height: 8px;
             background: rgba(255, 255, 255, 0.2);
             border-radius: 5px;
@@ -94,7 +88,6 @@
             border-radius: 50%;
             border: 2px solid white;
         }
-        /* Message box for permissions */
         #message-box {
             position: absolute;
             top: 50%;
@@ -107,7 +100,6 @@
             z-index: 20;
             display: none; /* Initially hidden */
             border: 1px solid rgba(255, 255, 255, 0.1);
-            max-width: 90%;
         }
     </style>
 </head>
@@ -118,15 +110,15 @@
     <div class="ui-container">
         <button id="startButton" class="control-button">Start</button>
         <div class="slider-container">
-            <label for="slices" class="font-medium text-sm">Slices</label>
-            <input type="range" id="slices" min="2" max="24" value="8" step="2">
+            <label for="sensitivity" class="font-medium text-sm">Sensitivity</label>
+            <input type="range" id="sensitivity" min="0.1" max="2" value="1" step="0.1">
         </div>
     </div>
 
     <div id="message-box">
         <h2 class="text-xl font-bold mb-2">Microphone Access Required</h2>
         <p class="text-gray-300">Please allow microphone access to start the visualizer.</p>
-        <p class="text-sm text-gray-400 mt-4">If you've blocked it, you may need to change the permission in your browser's site settings.</p>
+        <p class="text-sm text-gray-400 mt-4">If you've blocked it, you'll need to change the permission in your browser's site settings.</p>
     </div>
 
     <script>
@@ -134,7 +126,7 @@
         const canvas = document.getElementById('visualizerCanvas');
         const ctx = canvas.getContext('2d');
         const startButton = document.getElementById('startButton');
-        const slicesSlider = document.getElementById('slices');
+        const sensitivitySlider = document.getElementById('sensitivity');
         const messageBox = document.getElementById('message-box');
 
         // --- Audio Context Setup ---
@@ -142,19 +134,20 @@
         let analyser;
         let source;
         let isRunning = false;
-        let rotation = 0;
+        let lastBeatTime = 0;
+        const beatThreshold = 240; // Value to trigger a beat (0-255)
+        const beatCooldown = 300; // ms
 
         // --- Visualization Parameters ---
+        const symmetry = 6; // Number of symmetrical slices
+        const angle = (Math.PI * 2) / symmetry;
         let hue = 0;
 
         // --- Canvas and Audio Initialization ---
         function setup() {
             resizeCanvas();
-            window.addEventListener('resize', resizeCanvas, false);
+            window.addEventListener('resize', resizeCanvas);
             startButton.addEventListener('click', toggleAudio);
-            // Initial clear
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
 
         function resizeCanvas() {
@@ -165,15 +158,13 @@
         async function toggleAudio() {
             if (isRunning) {
                 // Stop the audio processing
-                if (audioContext) {
-                    await audioContext.close();
-                    audioContext = null;
-                }
-                isRunning = false;
-                startButton.textContent = 'Start';
-                // Clear canvas to show it's stopped
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                audioContext.close().then(() => {
+                    isRunning = false;
+                    startButton.textContent = 'Start';
+                    // Clear canvas to show it's stopped
+                    ctx.fillStyle = '#0a0a0a';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                });
             } else {
                 // Start the audio processing
                 try {
@@ -184,143 +175,150 @@
                     animate();
                 } catch (error) {
                     console.error('Error initializing audio:', error);
-                    // Show a helpful message to the user
                     messageBox.style.display = 'block';
                 }
             }
         }
 
         async function initAudio() {
-            // Create AudioContext after user gesture (e.g., button click)
+            // Create AudioContext after user gesture
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
             
-            // Get microphone input stream
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            // Get microphone input
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             
-            // Create audio nodes
+            // Create nodes
             source = audioContext.createMediaStreamSource(stream);
             analyser = audioContext.createAnalyser();
             
-            // Configure the analyser
-            analyser.fftSize = 512; // A good balance between performance and detail
+            // Configure analyser
+            analyser.fftSize = 2048; // Higher resolution for frequency data
             
             // Connect nodes: microphone -> analyser
             source.connect(analyser);
-            // We don't connect the analyser to the destination, so we don't hear the mic input (no feedback)
+            
+            // We don't connect analyser to destination, so we don't hear the mic input
         }
 
         // --- Main Animation Loop ---
         function animate() {
-            if (!isRunning || !analyser) return;
+            if (!isRunning) return;
 
             // --- Audio Data Analysis ---
             const bufferLength = analyser.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
             analyser.getByteFrequencyData(dataArray);
 
+            const sensitivity = sensitivitySlider.value;
+
             // Calculate average levels for different frequency bands
-            const bassAvg = getFrequencyAverage(dataArray, 0, bufferLength * 0.1); // Low frequencies
-            const midAvg = getFrequencyAverage(dataArray, bufferLength * 0.1, bufferLength * 0.4); // Mid frequencies
-            const trebleAvg = getFrequencyAverage(dataArray, bufferLength * 0.4, bufferLength); // High frequencies
+            const bass = getFrequencyAverage(dataArray, 0, 5) * sensitivity; // ~0-120Hz
+            const mids = getFrequencyAverage(dataArray, 20, 50) * sensitivity; // ~460-1160Hz
+            const treble = getFrequencyAverage(dataArray, 100, 200) * sensitivity; // ~2.3kHz-4.6kHz
+
+            // --- Beat Detection ---
+            let isBeat = false;
+            const currentTime = Date.now();
+            if (dataArray[2] > beatThreshold && (currentTime - lastBeatTime) > beatCooldown) {
+                isBeat = true;
+                lastBeatTime = currentTime;
+            }
 
             // --- Drawing and Visualization ---
-            draw(dataArray, bassAvg, midAvg, trebleAvg);
+            draw(bass, mids, treble, isBeat, dataArray);
             
-            // Request the next frame to continue the animation
+            // Request the next frame
             requestAnimationFrame(animate);
         }
 
         // --- Drawing Logic ---
-        function draw(data, bass, mids, treble) {
+        function draw(bass, mids, treble, isBeat, frequencyData) {
             // Create a motion blur/trail effect by fading the previous frame
             ctx.save();
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.025)'; // Lower alpha for longer trails
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.restore();
-
-            // Get kaleidoscope parameters from the UI
-            const slices = parseInt(slicesSlider.value);
-            const angleIncrement = (Math.PI * 2) / slices;
-            
-            // The overall rotation speed is influenced by the bass
-            rotation += bass / 6000;
 
             // Move to the center of the canvas
             ctx.save();
             ctx.translate(canvas.width / 2, canvas.height / 2);
-            ctx.rotate(rotation);
 
-            // Update hue for color cycling, speed based on treble
-            hue += 0.5 + (treble / 255);
+            // Update hue for color cycling
+            hue += 0.1;
 
             // Main kaleidoscope loop
-            for (let i = 0; i < slices; i++) {
-                ctx.rotate(angleIncrement);
+            for (let i = 0; i < symmetry; i++) {
+                ctx.rotate(angle);
                 
-                // Mirror every other slice for the classic kaleidoscope effect
-                if (i % 2 === 0) {
+                // --- Visual Elements ---
+                
+                // 1. Pulsing Beat Shape (Bass)
+                if (isBeat) {
                     ctx.save();
-                    ctx.scale(1, -1);
-                }
-
-                // --- Draw Visual Elements based on Audio ---
-                drawSlice(data, bass, mids, treble);
-                
-                if (i % 2 === 0) {
+                    ctx.fillStyle = `hsla(${hue + 180}, 100%, 70%, 0.8)`;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, bass * 2 + 50, 0, Math.PI * 2);
+                    ctx.fill();
                     ctx.restore();
                 }
+
+                // 2. Frequency Lines (Mids)
+                ctx.save();
+                ctx.lineWidth = 2 + (mids / 50);
+                for (let j = 1; j < frequencyData.length; j += 20) {
+                    const value = frequencyData[j] * sensitivitySlider.value;
+                    if (value < 5) continue; // Lowered threshold for more sensitivity
+                    
+                    const lineLength = value * 1.5;
+                    const lineHue = hue + j;
+                    
+                    ctx.strokeStyle = `hsla(${lineHue}, 80%, 60%, 0.6)`;
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    // Draw line straight out along the rotated x-axis for a clearer radial effect
+                    ctx.lineTo(lineLength, 0);
+                    ctx.stroke();
+                }
+                ctx.restore();
+
+                // 3. Sparkle Particles (Treble)
+                ctx.save();
+                const particleCount = Math.floor(treble / 10);
+                for (let k = 0; k < particleCount; k++) {
+                    const radius = Math.random() * (canvas.width / 3);
+                    const particleAngle = Math.random() * angle;
+                    const x = Math.cos(particleAngle) * radius;
+                    const y = Math.sin(particleAngle) * radius;
+                    
+                    ctx.fillStyle = `hsla(${hue + Math.random() * 60}, 100%, 90%, 0.9)`;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 1 + Math.random() * 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
             }
 
-            ctx.restore(); // Restore from center translation and rotation
+            ctx.restore(); // Restore from center translation
+
+            // --- No Audio Feedback ---
+            const totalEnergy = bass + mids + treble;
+            if (isRunning && totalEnergy < 5) {
+                ctx.save();
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.font = '20px Inter';
+                ctx.textAlign = 'center';
+                ctx.fillText('No audio detected', canvas.width / 2, canvas.height / 2);
+                ctx.restore();
+            }
         }
-        
-        // This function draws the content for a single kaleidoscope slice
-        function drawSlice(data, bass, mids, treble) {
-            ctx.beginPath();
-            // Start drawing from a point influenced by the bass
-            ctx.moveTo(bass / 4, bass / 4);
-
-            // Draw a complex line based on frequency data
-            for (let i = 0; i < data.length; i+=4) {
-                const value = data[i];
-                const radius = value * (mids / 255 + 3); // Radius influenced by mids
-                const angle = (i / data.length) * Math.PI; // Position within the slice
-
-                const x = Math.cos(angle) * radius;
-                const y = Math.sin(angle) * radius;
-
-                ctx.lineTo(x, y);
-            }
-            
-            ctx.lineWidth = 1 + (mids / 128);
-            ctx.strokeStyle = `hsl(${hue + (bass / 255 * 50)}, 100%, ${50 + treble / 255 * 25}%)`;
-            ctx.stroke();
-
-            // Add some "sparkle" particles based on treble
-            const particleCount = Math.floor(treble / 5);
-            for (let k = 0; k < particleCount; k++) {
-                const radius = Math.random() * 300 * (bass / 255 + 0.2);
-                const angle = Math.random() * Math.PI;
-                const x = Math.cos(angle) * radius;
-                const y = Math.sin(angle) * radius;
-                
-                ctx.fillStyle = `hsla(${hue + Math.random() * 50}, 100%, 80%, 0.8)`;
-                ctx.beginPath();
-                ctx.arc(x, y, 1 + Math.random() * (treble/128), 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
 
         // --- Helper Functions ---
         function getFrequencyAverage(dataArray, lowIndex, highIndex) {
             let sum = 0;
-            const floorLow = Math.floor(lowIndex);
-            const floorHigh = Math.floor(highIndex);
-            for (let i = floorLow; i < floorHigh; i++) {
+            for (let i = lowIndex; i < highIndex; i++) {
                 sum += dataArray[i];
             }
-            return sum / (floorHigh - floorLow);
+            return sum / (highIndex - lowIndex);
         }
 
         // --- Start the application ---
