@@ -34,6 +34,7 @@
             transform: translateX(-50%);
             z-index: 10;
             background-color: rgba(17, 17, 17, 0.8);
+            -webkit-backdrop-filter: blur(10px);
             backdrop-filter: blur(10px);
             border-radius: 0.75rem;
             padding: 1rem 1.5rem;
@@ -202,7 +203,8 @@
             analyser = audioContext.createAnalyser();
             
             // Configure the analyser
-            analyser.fftSize = 512; // A good balance between performance and detail
+            analyser.fftSize = 64; // A good balance between performance and detail
+            analyser.smoothingTimeConstant = 0.5;
             
             // Connect nodes: microphone -> analyser
             source.connect(analyser);
@@ -243,7 +245,7 @@
             const angleIncrement = (Math.PI * 2) / slices;
             
             // The overall rotation speed is influenced by the bass
-            rotation += bass / 8000;
+            rotation += bass / 7000;
 
             // Move to the center of the canvas
             ctx.save();
@@ -292,23 +294,23 @@
                 ctx.lineTo(x, y);
             }
             
-            ctx.lineWidth = 1 + (mids / 128);
+            ctx.lineWidth = 1.0 + (mids / 128);
             ctx.strokeStyle = `hsl(${hue + (bass / 255 * 50)}, 100%, ${50 + treble / 255 * 25}%)`;
             ctx.stroke();
 
             // Add some "sparkle" particles based on treble
-            const particleCount = Math.floor(treble / 5);
-            for (let k = 0; k < particleCount; k++) {
-                const radius = Math.random() * 300 * (bass / 255 + 0.2);
-                const angle = Math.random() * Math.PI;
-                const x = Math.cos(angle) * radius;
-                const y = Math.sin(angle) * radius;
+            // const particleCount = Math.floor(treble / 5);
+            // for (let k = 0; k < particleCount; k++) {
+            //     const radius = Math.random() * 300 * (bass / 255 + 0.2);
+            //     const angle = Math.random() * Math.PI;
+            //     const x = Math.cos(angle) * radius;
+            //     const y = Math.sin(angle) * radius;
                 
-                ctx.fillStyle = `hsla(${hue + Math.random() * 50}, 100%, 80%, 0.8)`;
-                ctx.beginPath();
-                ctx.arc(x, y, 1 + Math.random() * (treble/128), 0, Math.PI * 2);
-                ctx.fill();
-            }
+            //     ctx.fillStyle = `hsla(${hue + Math.random() * 50}, 100%, 80%, 0.8)`;
+            //     ctx.beginPath();
+            //     ctx.arc(x, y, 1 + Math.random() * (treble/128), 0, Math.PI * 2);
+            //     ctx.fill();
+            // }
         }
 
 
