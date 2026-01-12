@@ -1,332 +1,527 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kaleidoscope Music Visualizer</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Audio Reactive Spiral Galaxy</title>
     <style>
-        /* Basic styling for the body and canvas */
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #000000;
-            color: #f0f0f0;
-            overflow: hidden; /* Prevents scrollbars */
             margin: 0;
-            padding: 0;
+            overflow: hidden;
+            background-color: #050505;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
         }
-        #visualizerCanvas {
+
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        #ui-layer {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 0;
-        }
-        /* Styling for the UI controls container */
-        .ui-container {
-            position: absolute;
-            bottom: 2rem;
-            left: 50%;
-            transform: translateX(-50%);
             z-index: 10;
-            background-color: rgba(17, 17, 17, 0.8);
-            -webkit-backdrop-filter: blur(10px);
-            backdrop-filter: blur(10px);
-            border-radius: 0.75rem;
-            padding: 1rem 1.5rem;
             display: flex;
+            justify-content: center;
             align-items: center;
-            gap: 1.5rem;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            pointer-events: none;
         }
-        /* Styling for buttons */
-        .control-button {
-            background-color: #8a2be2; /* A nice purple */
-            color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.5rem;
-            border: none;
-            font-weight: 500;
+
+        #start-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #fff;
+            padding: 15px 30px;
+            font-size: 1.2rem;
             cursor: pointer;
-            transition: background-color 0.3s ease, transform 0.2s ease;
+            border-radius: 30px;
+            -webkit-backdrop-filter: blur(5px);
+            backdrop-filter: blur(5px);
+            transition: all 0.3s ease;
+            pointer-events: auto;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
         }
-        .control-button:hover {
-            background-color: #9932cc; /* Darker purple on hover */
+
+        #start-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+            box-shadow: 0 0 30px rgba(100, 200, 255, 0.4);
+            transform: scale(1.05);
         }
-        .control-button:active {
-            transform: scale(0.95);
-        }
-        /* Styling for sliders */
-        .slider-container {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-        input[type="range"] {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 120px;
-            height: 8px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 5px;
-            outline: none;
-            transition: opacity .2s;
-        }
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 20px;
-            height: 20px;
-            background: #8a2be2;
-            cursor: pointer;
-            border-radius: 50%;
-            border: 2px solid white;
-        }
-        input[type="range"]::-moz-range-thumb {
-            width: 20px;
-            height: 20px;
-            background: #8a2be2;
-            cursor: pointer;
-            border-radius: 50%;
-            border: 2px solid white;
-        }
-        /* Message box for permissions */
-        #message-box {
+
+        #status {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: rgba(17, 17, 17, 0.9);
-            padding: 2rem;
-            border-radius: 1rem;
-            text-align: center;
-            z-index: 20;
-            display: none; /* Initially hidden */
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            max-width: 90%;
+            bottom: 20px;
+            left: 20px;
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.5);
+            z-index: 10;
+        }
+
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
         }
     </style>
 </head>
-<body class="w-screen h-screen m-0 p-0">
 
-    <canvas id="visualizerCanvas"></canvas>
+<body>
 
-    <div class="ui-container">
-        <button id="startButton" class="control-button">Start</button>
-        <div class="slider-container">
-            <label for="slices" class="font-medium text-sm">Slices</label>
-            <input type="range" id="slices" min="2" max="24" value="8" step="2">
-        </div>
+    <canvas id="galaxyCanvas"></canvas>
+
+    <div id="ui-layer">
+        <button id="start-btn">Initialize Simulation & Mic</button>
     </div>
 
-    <div id="message-box">
-        <h2 class="text-xl font-bold mb-2">Microphone Access Required</h2>
-        <p class="text-gray-300">Please allow microphone access to start the visualizer.</p>
-        <p class="text-sm text-gray-400 mt-4">If you've blocked it, you may need to change the permission in your browser's site settings.</p>
-    </div>
+    <div id="status">Waiting for input...</div>
 
     <script>
-        // --- DOM Elements ---
-        const canvas = document.getElementById('visualizerCanvas');
-        const ctx = canvas.getContext('2d');
-        const startButton = document.getElementById('startButton');
-        const slicesSlider = document.getElementById('slices');
-        const messageBox = document.getElementById('message-box');
+        // --- Configuration ---
+        const CONFIG = {
+            particleCount: 6000,
+            armCount: 2,
+            galaxyRadius: 0, // Set dynamically based on screen
+            coreRadius: 30,  // Smaller core for more dramatic 3D
+            rotationSpeed: 0.003,
+            referenceBpm: 140, // Used as the "normal" tempo for rotation calibration
+            minBpm: 60,
+            maxBpm: 180,
+            minBeatInterval: 1, // ms, prevent double-trigger on the same beat
+            bpmSmoothing: 0.1,
+            beatHistory: 8,
+            bassThreshold: 200, // Updated lower for better sensitivity
+            maxBassLevel: 255,   // For auto-calibration
+            waveSpeed: 100,
+            waveForce: 75, // How far particles are pushed
+            // 3D Perspective Settings
+            tiltAngle: 0.6,           // Radians - how much the galaxy tilts toward viewer (0.6 ≈ 35°)
+            perspective: 800,          // Camera distance - lower = more dramatic perspective
+            depthRange: 200,           // Max Z displacement for particles
+            autoRotateY: 0.004        // Slow Y-axis rotation for dynamic viewing
+        };
 
-        // --- Audio Context Setup ---
-        let audioContext;
-        let analyser;
-        let source;
-        let isRunning = false;
-        let rotation = 0;
+        // --- Globals ---
+        let canvas, ctx;
+        let width, height, centerX, centerY;
+        let particles = [];
+        let waves = [];
+        let audioContext, analyser, dataArray;
+        let isAudioActive = false;
+        let time = 0;
+        let beatTimes = [];
+        let lastBeatTime = 0;
+        let currentBpm = CONFIG.referenceBpm;
+        let currentRotationSpeed = CONFIG.rotationSpeed;
+        let sceneRotationY = 0; // Cumulative horizontal rotation for 3D effect
 
-        // --- Visualization Parameters ---
-        let hue = 0;
+        // --- Audio Setup ---
+        async function initAudio() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const source = audioContext.createMediaStreamSource(stream);
+                analyser = audioContext.createAnalyser();
 
-        // --- Canvas and Audio Initialization ---
-        function setup() {
-            resizeCanvas();
-            window.addEventListener('resize', resizeCanvas, false);
-            startButton.addEventListener('click', toggleAudio);
-            // Initial clear
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-        }
+                analyser.fftSize = 2048; // Resolution of audio data
+                source.connect(analyser);
 
-        function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-        }
+                const bufferLength = analyser.frequencyBinCount;
+                dataArray = new Uint8Array(bufferLength);
 
-        async function toggleAudio() {
-            if (isRunning) {
-                // Stop the audio processing
-                if (audioContext) {
-                    await audioContext.close();
-                    audioContext = null;
-                }
-                isRunning = false;
-                startButton.textContent = 'Start';
-                // Clear canvas to show it's stopped
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-            } else {
-                // Start the audio processing
-                try {
-                    await initAudio();
-                    isRunning = true;
-                    startButton.textContent = 'Stop';
-                    messageBox.style.display = 'none';
-                    animate();
-                } catch (error) {
-                    console.error('Error initializing audio:', error);
-                    // Show a helpful message to the user
-                    messageBox.style.display = 'block';
-                }
+                isAudioActive = true;
+                document.getElementById('start-btn').classList.add('hidden');
+                document.getElementById('status').innerText = "Simulation Active | Reacting to Audio";
+            } catch (err) {
+                console.error("Audio init failed:", err);
+                document.getElementById('status').innerText = "Microphone access denied. Running visual mode only.";
+                document.getElementById('start-btn').innerText = "Start Visuals Only";
+                // Allow running without audio if denied
+                document.getElementById('start-btn').onclick = () => {
+                    document.getElementById('start-btn').classList.add('hidden');
+                    isAudioActive = true; // Logic runs, just with 0 volume
+                };
             }
         }
 
-        async function initAudio() {
-            // Create AudioContext after user gesture (e.g., button click)
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // Get microphone input stream
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-            
-            // Create audio nodes
-            source = audioContext.createMediaStreamSource(stream);
-            analyser = audioContext.createAnalyser();
-            
-            // Configure the analyser
-            analyser.fftSize = 64; // A good balance between performance and detail
-            analyser.smoothingTimeConstant = 0.5;
-            
-            // Connect nodes: microphone -> analyser
-            source.connect(analyser);
-            // We don't connect the analyser to the destination, so we don't hear the mic input (no feedback)
+        // --- Classes ---
+
+        class Wave {
+            constructor() {
+                this.radius = CONFIG.coreRadius;
+                this.active = true;
+                this.opacity = 1;
+            }
+
+            update() {
+                this.radius += CONFIG.waveSpeed;
+                this.opacity -= 0.090; // Fade out
+                if (this.opacity <= 0 || this.radius > Math.max(width, height)) {
+                    this.active = false;
+                }
+            }
+
+            draw() {
+                // Optional: Draw the shockwave ring (subtle)
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, this.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(255, 255, 255, ${this.opacity * 0.1})`;
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
         }
 
-        // --- Main Animation Loop ---
-        function animate() {
-            if (!isRunning || !analyser) return;
+        // --- 3D Projection Utilities ---
+        function project3D(x, y, z) {
+            // Apply scene Y-rotation (horizontal rotation)
+            const cosY = Math.cos(sceneRotationY);
+            const sinY = Math.sin(sceneRotationY);
+            const rotatedX = x * cosY - z * sinY;
+            const rotatedZ = x * sinY + z * cosY;
 
-            // --- Audio Data Analysis ---
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
+            // Apply tilt (X-rotation) - tilts the galaxy toward viewer
+            const cosT = Math.cos(CONFIG.tiltAngle);
+            const sinT = Math.sin(CONFIG.tiltAngle);
+            const tiltedY = y * cosT - rotatedZ * sinT;
+            const tiltedZ = y * sinT + rotatedZ * cosT;
+
+            // Perspective projection
+            const scale = CONFIG.perspective / (CONFIG.perspective + tiltedZ);
+
+            return {
+                screenX: centerX + rotatedX * scale,
+                screenY: centerY + tiltedY * scale,
+                scale: scale,
+                z: tiltedZ // For depth sorting
+            };
+        }
+
+        class Particle {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                // Spiral Math
+                this.dist = Math.random() * Math.random() * CONFIG.galaxyRadius + CONFIG.coreRadius;
+                const spiralAngle = this.dist * 0.005;
+                const armAngle = (Math.floor(Math.random() * CONFIG.armCount) * (Math.PI * 2)) / CONFIG.armCount;
+                const scatter = (Math.random() - 0.5) * 0.25;
+
+                this.angle = spiralAngle + armAngle + scatter;
+
+                // Physics properties
+                this.currentDist = this.dist;
+                this.targetDist = this.dist;
+                this.velocity = 0;
+
+                // 3D: Add Z-axis displacement (disk thickness)
+                const thicknessMult = 1 - (this.dist / CONFIG.galaxyRadius);
+                this.baseZ = (Math.random() - 0.5) * CONFIG.depthRange * thicknessMult;
+                this.z = this.baseZ;
+
+                this.size = Math.random() * 2 + 0.25;
+
+                // Color based on distance
+                const distRatio = this.dist / CONFIG.galaxyRadius;
+                const hueVariation = Math.random() * 60;
+                const saturationVariation = Math.random() * 20 + 60;
+                const lightnessVariation = Math.random() * 20 + 50;
+
+                if (Math.random() > 0.95) {
+                    this.color = '#ffffff';
+                } else if (distRatio < 0.3) {
+                    this.color = `hsl(${200 + hueVariation}, ${saturationVariation}%, ${lightnessVariation}%)`;
+                } else if (distRatio < 0.6) {
+                    this.color = `hsl(${280 + hueVariation}, ${saturationVariation}%, ${lightnessVariation}%)`;
+                } else {
+                    this.color = `hsl(${340 + hueVariation}, ${saturationVariation}%, ${lightnessVariation}%)`;
+                }
+
+                this.baseColor = this.color;
+                this.brightness = 1;
+
+                // Store projected values for sorting/rendering
+                this.screenX = 0;
+                this.screenY = 0;
+                this.projectedZ = 0;
+                this.projectedScale = 1;
+            }
+
+            update(bassIntensity) {
+                // 1. Orbital Rotation
+                const orbitalSpeed = (currentRotationSpeed * 1000) / (this.targetDist + 100);
+                this.angle += orbitalSpeed;
+
+                // 2. Wave Interaction
+                let affectedByWave = false;
+                let maxWaveBrightness = 0;
+
+                for (let wave of waves) {
+                    const distToWave = Math.abs(this.currentDist - wave.radius);
+                    const waveThickness = 30;
+
+                    if (distToWave < waveThickness) {
+                        const ratio = 1 - distToWave / waveThickness;
+                        const force = ratio * CONFIG.waveForce;
+                        this.targetDist = this.dist + force;
+
+                        // Also push in Z direction for 3D splash effect
+                        this.z = this.baseZ + force * 0.5 * (Math.random() > 0.5 ? 1 : -1);
+
+                        // Dynamic brightness based on proximity to wave center
+                        const waveB = 0.5 + ratio * 1.5;
+                        if (waveB > maxWaveBrightness) maxWaveBrightness = waveB;
+
+                        this.size = Math.max(this.size, 2);
+                        affectedByWave = true;
+                    }
+                }
+
+                if (affectedByWave) {
+                    this.brightness = maxWaveBrightness;
+                } else {
+                    this.targetDist = this.dist;
+                    // React to raw bass intensity even without waves
+                    const bassEffect = (bassIntensity / 255) * 30;
+                    this.targetDist += bassEffect;
+
+                    this.z += (this.baseZ - this.z) * 0.05;
+                    // Glow with bass
+                    const targetBrightness = 1 + (bassIntensity / 255) * 1.0;
+                    this.brightness += (targetBrightness - this.brightness) * 0.1;
+
+                    if (this.size > 3) this.size *= 0.9;
+                }
+
+                // Elastic Physics
+                const k = 0.1;
+                const damp = 0.85;
+                const accel = (this.targetDist - this.currentDist) * k;
+                this.velocity += accel;
+                this.velocity *= damp;
+                this.currentDist += this.velocity;
+
+                // Calculate 3D position
+                const x = Math.cos(this.angle) * this.currentDist;
+                const y = Math.sin(this.angle) * this.currentDist;
+
+                // Project
+                const projected = project3D(x, y, this.z);
+                this.screenX = projected.screenX;
+                this.screenY = projected.screenY;
+                this.projectedZ = projected.z;
+                this.projectedScale = projected.scale;
+            }
+
+            draw() {
+                const x = this.screenX;
+                const y = this.screenY;
+
+                // Optimization: Don't draw off-screen
+                if (x < -50 || x > width + 50 || y < -50 || y > height + 50) return;
+
+                // Depth-based size and opacity
+                const depthSize = this.size * this.projectedScale * (this.brightness > 1 ? 1.5 : 1);
+                const depthOpacity = Math.min(1, 0.4 + this.projectedScale * 0.6);
+
+                ctx.fillStyle = this.brightness > 1.5 ? '#fff' : this.baseColor;
+                ctx.globalAlpha = Math.min(1, this.brightness) * depthOpacity;
+
+                ctx.beginPath();
+                ctx.arc(x, y, Math.max(0.2, depthSize), 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+
+        // --- Core Logic ---
+
+        function init() {
+            canvas = document.getElementById('galaxyCanvas');
+            ctx = canvas.getContext('2d');
+
+            resize();
+            window.addEventListener('resize', resize);
+
+            // Spawn particles
+            for (let i = 0; i < CONFIG.particleCount; i++) {
+                particles.push(new Particle());
+            }
+
+            document.getElementById('start-btn').addEventListener('click', initAudio);
+
+            animate();
+        }
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+            centerX = width / 2;
+            centerY = height / 2;
+            CONFIG.galaxyRadius = Math.max(width, height) * 0.7;
+        }
+
+        function analyzeAudio() {
+            if (!analyser) return 0;
+
             analyser.getByteFrequencyData(dataArray);
 
-            // Calculate average levels for different frequency bands
-            const bassAvg = getFrequencyAverage(dataArray, 0, bufferLength * 0.1); // Low frequencies
-            const midAvg = getFrequencyAverage(dataArray, bufferLength * 0.1, bufferLength * 0.4); // Mid frequencies
-            const trebleAvg = getFrequencyAverage(dataArray, bufferLength * 0.4, bufferLength); // High frequencies
+            // Calculate Bass Average (Low frequencies are usually in the first few bins)
+            // Bins 0-5 approx
+            let bassSum = 0;
+            let count = 6;
+            for (let i = 0; i < count; i++) {
+                bassSum += dataArray[i];
+            }
+            const avg = bassSum / count;
 
-            // --- Drawing and Visualization ---
-            draw(dataArray, bassAvg, midAvg, trebleAvg);
-            
-            // Request the next frame to continue the animation
+            // Simple Auto-Calibration: track max bass seen recently
+            if (avg > CONFIG.maxBassLevel * 0.8) {
+                CONFIG.maxBassLevel = avg;
+            } else {
+                CONFIG.maxBassLevel *= 0.955; // Slowly drift down
+            }
+            CONFIG.maxBassLevel = Math.max(100, CONFIG.maxBassLevel);
+
+            // Dynamic Threshold: 80% of max seen, or base threshold
+            const dynamicThreshold = Math.max(CONFIG.bassThreshold, CONFIG.maxBassLevel * 0.8);
+
+            return {
+                level: avg,
+                threshold: dynamicThreshold
+            };
+        }
+
+        function updateBpmFromBeats() {
+            if (beatTimes.length < 2) return;
+
+            const intervals = [];
+            for (let i = 1; i < beatTimes.length; i++) {
+                intervals.push(beatTimes[i] - beatTimes[i - 1]);
+            }
+
+            // Average interval in ms
+            const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+            const bpm = 60000 / avgInterval;
+            const clampedBpm = Math.max(CONFIG.minBpm, Math.min(CONFIG.maxBpm, bpm));
+
+            // Smooth to avoid jitter
+            currentBpm = currentBpm * (1 - CONFIG.bpmSmoothing) + clampedBpm * CONFIG.bpmSmoothing;
+
+            const bpmMultiplier = currentBpm / CONFIG.referenceBpm;
+            const targetRotation = CONFIG.rotationSpeed * bpmMultiplier;
+            // Ease rotation changes so the arms don't jerk
+            currentRotationSpeed += (targetRotation - currentRotationSpeed) * 0.25;
+        }
+
+        function handleBeatDetection(bassLevel) {
+            const now = performance.now();
+            const beatDetected = bassLevel > CONFIG.bassThreshold && now - lastBeatTime > CONFIG.minBeatInterval;
+
+            if (beatDetected) {
+                lastBeatTime = now;
+                beatTimes.push(now);
+                if (beatTimes.length > CONFIG.beatHistory) {
+                    beatTimes.shift();
+                }
+                updateBpmFromBeats();
+            } else if (now - lastBeatTime > 2000) {
+                // Drift back toward the reference tempo if no beats are detected for a while
+                currentBpm += (CONFIG.referenceBpm - currentBpm) * 0.02;
+                currentRotationSpeed += (CONFIG.rotationSpeed - currentRotationSpeed) * 0.05;
+            }
+        }
+
+        function animate() {
             requestAnimationFrame(animate);
-        }
 
-        // --- Drawing Logic ---
-        function draw(data, bass, mids, treble) {
-            // Create a motion blur/trail effect by fading the previous frame
-            ctx.save();
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'; // Lower alpha for longer trails
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.restore();
+            // 1. Scene Updates
+            sceneRotationY += CONFIG.autoRotateY;
 
-            // Get kaleidoscope parameters from the UI
-            const slices = parseInt(slicesSlider.value);
-            const angleIncrement = (Math.PI * 2) / slices;
-            
-            // The overall rotation speed is influenced by the bass
-            rotation += bass / 7000;
+            // Clear Screen with slight fade for trails
+            ctx.fillStyle = 'rgba(5, 5, 5, 0.3)'; // Lower alpha = longer trails
+            ctx.fillRect(0, 0, width, height);
 
-            // Move to the center of the canvas
-            ctx.save();
-            ctx.translate(canvas.width / 2, canvas.height / 2);
-            ctx.rotate(rotation);
+            // Audio Logic
+            let bassData = { level: 0, threshold: CONFIG.bassThreshold };
+            if (isAudioActive && analyser) {
+                bassData = analyzeAudio();
 
-            // Update hue for color cycling, speed based on treble
-            hue += 0.5 + (treble / 255);
-
-            // Main kaleidoscope loop
-            for (let i = 0; i < slices; i++) {
-                ctx.rotate(angleIncrement);
-                
-                // Mirror every other slice for the classic kaleidoscope effect
-                if (i % 2 === 0) {
-                    ctx.save();
-                    ctx.scale(1, -1);
+                if (bassData.level > bassData.threshold) {
+                    if (waves.length === 0 || waves[waves.length - 1].radius > 100) {
+                        waves.push(new Wave());
+                    }
                 }
+                handleBeatDetection(bassData.level);
+            }
 
-                // --- Draw Visual Elements based on Audio ---
-                drawSlice(data, bass, mids, treble);
-                
-                if (i % 2 === 0) {
-                    ctx.restore();
+            // Update Waves
+            for (let i = waves.length - 1; i >= 0; i--) {
+                waves[i].update();
+                if (!waves[i].active) {
+                    waves.splice(i, 1);
                 }
             }
 
-            ctx.restore(); // Restore from center translation and rotation
-        }
-        
-        // This function draws the content for a single kaleidoscope slice
-        function drawSlice(data, bass, mids, treble) {
+            // Update Particles & Prepare for Drawing
+            particles.forEach(p => p.update(bassData.level));
+
+            // Depth Sorting (Painter's Algorithm)
+            // Draw particles from back to front (highest Z to lowest Z)
+            particles.sort((a, b) => b.projectedZ - a.projectedZ);
+
+            // Draw Black Hole / Center Glow (Projected)
+            const coreProjected = project3D(0, 0, 0);
+            const coreScale = coreProjected.scale;
+
+            const gradient = ctx.createRadialGradient(
+                coreProjected.screenX, coreProjected.screenY, 0,
+                coreProjected.screenX, coreProjected.screenY, CONFIG.coreRadius * 2 * coreScale
+            );
+            gradient.addColorStop(0, 'rgba(0,0,0,1)');
+            gradient.addColorStop(0.3, 'rgba(0,0,0,1)');
+            gradient.addColorStop(0.4, 'rgba(100, 50, 255, 0.8)');
+            gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+            ctx.fillStyle = gradient;
             ctx.beginPath();
-            // Start drawing from a point influenced by the bass
-            ctx.moveTo(bass / 4, bass / 4);
+            ctx.arc(coreProjected.screenX, coreProjected.screenY, CONFIG.coreRadius * 5 * coreScale, 0, Math.PI * 2);
+            ctx.fill();
 
-            // Draw a complex line based on frequency data
-            for (let i = 0; i < data.length; i+=4) {
-                const value = data[i];
-                const radius = value * (mids / 255 + 3); // Radius influenced by mids
-                const angle = (i / data.length) * Math.PI; // Position within the slice
+            // Draw Particles
+            particles.forEach(p => p.draw());
 
-                const x = Math.cos(angle) * radius;
-                const y = Math.sin(angle) * radius;
+            // Optional: Debug Audio Bar
+            if (isAudioActive) {
+                // Background bar
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                ctx.fillRect(10, height - 255, 10, 255);
 
-                ctx.lineTo(x, y);
+                // Audio level
+                ctx.fillStyle = 'rgba(0, 255, 150, 0.5)';
+                ctx.fillRect(10, height - bassData.level, 10, bassData.level);
+
+                // Threshold line
+                ctx.fillStyle = 'rgba(255, 50, 50, 0.8)';
+                ctx.fillRect(8, height - bassData.threshold, 14, 2);
             }
-            
-            ctx.lineWidth = 1.0 + (mids / 128);
-            ctx.strokeStyle = `hsl(${hue + (bass / 255 * 50)}, 100%, ${50 + treble / 255 * 25}%)`;
-            ctx.stroke();
-
-            // Add some "sparkle" particles based on treble
-            // const particleCount = Math.floor(treble / 5);
-            // for (let k = 0; k < particleCount; k++) {
-            //     const radius = Math.random() * 300 * (bass / 255 + 0.2);
-            //     const angle = Math.random() * Math.PI;
-            //     const x = Math.cos(angle) * radius;
-            //     const y = Math.sin(angle) * radius;
-                
-            //     ctx.fillStyle = `hsla(${hue + Math.random() * 50}, 100%, 80%, 0.8)`;
-            //     ctx.beginPath();
-            //     ctx.arc(x, y, 1 + Math.random() * (treble/128), 0, Math.PI * 2);
-            //     ctx.fill();
-            // }
         }
 
+        // Start
+        init();
 
-        // --- Helper Functions ---
-        function getFrequencyAverage(dataArray, lowIndex, highIndex) {
-            let sum = 0;
-            const floorLow = Math.floor(lowIndex);
-            const floorHigh = Math.floor(highIndex);
-            for (let i = floorLow; i < floorHigh; i++) {
-                sum += dataArray[i];
-            }
-            return sum / (floorHigh - floorLow);
-        }
-
-        // --- Start the application ---
-        setup();
     </script>
 </body>
+
 </html>
